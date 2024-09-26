@@ -109,6 +109,21 @@ class LLaVa_LVIS4V_LRV_Config(DatasetConfig):
     )
     dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
 
+# [Reproduction] LLaVa-v15 (exact dataset used in all public LLaVa-v15 models)
+@dataclass
+class PGVLM_PHYSOBJECTS_Config(DatasetConfig):
+    dataset_id: str = "pgvlm-physobjects"
+
+    align_stage_components: Tuple[Path, Path] = (
+        Path("download/llava-laion-cc-sbu-558k/chat.json"),
+        Path("download/llava-laion-cc-sbu-558k/"),
+    )
+    finetune_stage_components: Tuple[Path, Path] = (
+        Path("download/llava-v1.5-instruct/llava_v1_5_mix665k.json"),
+        Path("download/llava-v1.5-instruct/"),
+    )
+    dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
+
 
 # === Define a Dataset Registry Enum for Reference & Validation =>> all *new* datasets must be added here! ===
 @unique
