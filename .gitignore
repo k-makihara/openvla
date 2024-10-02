@@ -132,7 +132,7 @@ dmypy.json
 .ruff_cache/
 
 # Auth Tokens / Hidden Files
-.hf_token
+#.hf_token
 .wandb_api_key
 .*_token
 .*api_key

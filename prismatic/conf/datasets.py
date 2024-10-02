@@ -125,6 +125,21 @@ class PGVLM_PHYSOBJECTS_Config(DatasetConfig):
     dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
 
 
+# CVS-JPN_CLIP
+@dataclass
+class CVS_JPN_Config(DatasetConfig):
+    dataset_id: str = "cvs-jpn"
+
+    align_stage_components: Tuple[Path, Path] = (
+        Path("train.json"),
+        Path(""),
+    )
+    finetune_stage_components: Tuple[Path, Path] = (
+        Path("train.json"),
+        Path(""),
+    )
+    dataset_root_dir: Path = Path("/groups/gaf51379/physical-grounding/products")
+
 # === Define a Dataset Registry Enum for Reference & Validation =>> all *new* datasets must be added here! ===
 @unique
 class DatasetRegistry(Enum):
@@ -137,6 +152,8 @@ class DatasetRegistry(Enum):
     LLAVA_LRV = LLaVa_LRV_Config
 
     LLAVA_LVIS4V_LRV = LLaVa_LVIS4V_LRV_Config
+
+    CVS_JPN = CVS_JPN_Config
 
     @property
     def dataset_id(self) -> str:

@@ -51,12 +51,12 @@ class PretrainConfig:
 
     # ModelConfig (`prismatic/conf/models.py`); override with --model.type `ModelRegistry.<MODEL>.model_id`
     model: ModelConfig = field(
-        default_factory=ModelConfig.get_choice_class(ModelRegistry.PRISM_DINOSIGLIP_CONTROLLED_7B.model_id)
+        default_factory=ModelConfig.get_choice_class(ModelRegistry.PRISM_DINOSIGLIP_224PX_CONTROLLED_7B.model_id)
     )
 
     # DatasetConfig (`prismatic/conf/datasets.py`); override with --dataset.type `DatasetRegistry.<DATASET>.dataset_id`
     dataset: DatasetConfig = field(
-        default_factory=DatasetConfig.get_choice_class(DatasetRegistry.LLAVA_V15.dataset_id)
+        default_factory=DatasetConfig.get_choice_class(DatasetRegistry.CVS_JPN.dataset_id)
     )
 
     # Pretraining Stage in < align (projector-only) | finetune (projector + LLM) | full-finetune (all) >
@@ -67,16 +67,18 @@ class PretrainConfig:
 
     # Run Arguments
     run_id: Optional[str] = None                                    # Run ID for logging, Weights & Biases
-    run_root_dir: Path = Path("/mnt/fsx/x-prismatic-vlms/runs")     # Path to directory to store logs & checkpoints
+    run_root_dir: Path = Path("runs")     # Path to directory to store logs & checkpoints
     seed: int = 7                                                   # Random seed (for reproducibility)
 
     # HF Hub Credentials (for any gated models)
     hf_token: Union[str, Path] = Path(".hf_token")                  # Environment variable or Path to HF Token
 
     # Tracking Parameters
-    trackers: Tuple[str, ...] = ("jsonl", "wandb")                  # Trackers to initialize (if W&B, add config!)
-    wandb_project: str = "onyx-vlms"                                # Name of W&B project (default: `prismatic`)
-    wandb_entity: Optional[str] = "stanford-voltron"                # Name of W&B entity (default: None)
+    #trackers: Tuple[str, ...] = ("jsonl", "wandb")                  # Trackers to initialize (if W&B, add config!)
+    #wandb_project: str = "onyx-vlms"                                # Name of W&B project (default: `prismatic`)
+    #wandb_entity: Optional[str] = "stanford-voltron"                # Name of W&B entity (default: None)
+    wandb_project: str = "pg-vla"
+    wandb_entity: str = "cvs-jpn"
 
     def __post_init__(self) -> None:
         """Set optimization parameters based on `stage` in {"align", "finetune"}."""
@@ -215,8 +217,8 @@ def pretrain(cfg: PretrainConfig) -> None:
         run_dir,
         draccus.encode(cfg),
         cfg.stage,
-        wandb_project=cfg.wandb_project,
-        wandb_entity=cfg.wandb_entity,
+        #wandb_project=cfg.wandb_project,
+        #wandb_entity=cfg.wandb_entity,
         grad_accumulation_steps=train_strategy.grad_accumulation_steps,
     )
 
@@ -236,3 +238,12 @@ def pretrain(cfg: PretrainConfig) -> None:
 
 if __name__ == "__main__":
     pretrain()
+
+
+#export HF_HOME=/groups/gaf51379/physical-grounding/makihara/prismatic-vlms
+#torchrun --standalone --nnodes 1 --nproc-per-node 4 scripts/pretrain.py \
+#  --model.type "phi-2+3b" \
+#  --model.model_id "minimum-cvsjpn" \
+#  --model.vision_backbone_id "dinosiglip-vit-so-224px" \
+#  --model.image_resize_strategy "letterbox" \
+#  --model.llm_backbone_id "phi-2-3b"

@@ -198,3 +198,104 @@ class FinetuneDataset(Dataset[Dict[str, torch.Tensor]]):
 
     def __len__(self) -> int:
         return len(self.examples)
+
+class CVSFinetuneDataset(Dataset[Dict[str, torch.Tensor]]):
+    def __init__(
+        self,
+        instruct_json: Path,
+        image_dir: Path,
+        image_transform: ImageTransform,
+        tokenizer: PreTrainedTokenizerBase,
+        prompt_builder_fn: Type[PromptBuilder],
+    ) -> None:
+        super().__init__()
+        self.instruct_json, self.image_dir = instruct_json, image_dir
+        self.image_transform, self.tokenizer = image_transform, tokenizer
+        self.prompt_builder_fn = prompt_builder_fn
+        self.dataset_type = "finetune"
+
+        # Load Instruct JSON
+        with open(self.instruct_json, "r") as f:
+            self.examples = json.load(f)
+
+    # === Unimodal + Multimodal Handling ===
+    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+        """
+        Unlike the *align* stage handling, for the *finetune* stage, we actually need to handle multiple "turns" of
+        dialog grounded in a single image.
+
+        To do this, we leverage the `prompt_builder_fn` which instantiates a PromptBuilder object. By calling the
+        methods for adding turns and getting a prompt, we ensure proper formatting and consistency for each example.
+
+        :param idx: Index to retrieve from the dataset.
+
+        :return: Dictionary of {"pixel_values": torch.Tensor, "input_ids": torch.Tensor, "labels": torch.Tensor}
+        """
+        product_name = self.examples[idx]["name"]
+        common_name = self.examples[idx]["name_common"]
+        conversation = f"a picture of {product_name} which is commonly {common_name}"
+
+        # Create Prompt Builder --> add each message sequentially
+        prompt_builder, input_ids, labels = self.prompt_builder_fn(model_family="prismatic"), [], []
+
+        turn_idx = 0
+        # Get "effective" string added to prompt --> handle whitespace for tokenizer type!
+        msg = prompt_builder.add_turn("human", conversation)
+
+        # Llama Tokenizer (Fast) adds extra character if a string ends in whitespace --> strip if non-empty!
+        if isinstance(self.tokenizer, LlamaTokenizerFast):
+            msg = msg.rstrip()
+
+        # Phi-2 Tokenizer == CodeGenTokenizer (Fast) -- no special handling!
+        elif isinstance(self.tokenizer, CodeGenTokenizerFast):
+            pass
+
+        else:
+            raise ValueError(f"Tokenizer of type `{type(self.tokenizer)}` is not explicitly handled!")
+
+        # Tokenize Input IDs
+        turn_input_ids = self.tokenizer(msg, add_special_tokens=turn_idx == 0).input_ids
+
+        # [CRITICAL] We do not want to take the loss for the "USER: <msg>" prompts =>> just the responses!
+        turn_labels = (
+            [IGNORE_INDEX for _ in range(len(turn_input_ids))] if (turn_idx % 2) == 0 else list(turn_input_ids)
+        )
+
+        # Add to Trackers
+        input_ids.extend(turn_input_ids)
+        labels.extend(turn_labels)
+
+        # Tensorize =>> Set the <BOS> token's label to IGNORE_INDEX (since we're inserting the image patches after)
+        #   - IMPORTANT => IF WE'RE USING HF LLM.forward(... labels=labels), SHIFTING HAPPENS _INSIDE_ MODEL!
+        input_ids, labels = torch.tensor(input_ids), torch.tensor(labels)
+
+        # Handle Truncation (if necessary)
+        input_ids, labels = input_ids[: self.tokenizer.model_max_length], labels[: self.tokenizer.model_max_length]
+
+        # === Handle "unimodal" (language-only) vs. "multimodal" ===
+        if "image_path" in self.examples[idx]:
+            image_path = Path(self.examples[idx]["image_path"])
+
+            # Set the <BOS> token's label to IGNORE_INDEX (since we're inserting the image patches right after)
+            labels[0] = IGNORE_INDEX
+
+            # Process Image --> get "pixel_values" (will either be a torch.Tensor OR a Dict[str,torch.Tensor])
+            pixel_values = self.image_transform(Image.open(self.image_dir / image_path).convert("RGB"))
+
+            return dict(pixel_values=pixel_values, input_ids=input_ids, labels=labels)
+
+        else:
+            # No image --> return `pixel_values` = None; Collator will do the smart batch handling for us!
+            return dict(pixel_values=None, input_ids=input_ids, labels=labels)
+
+    def get_modality_lengths(self) -> List[Tuple[bool, int]]:
+        """Get a list of modalities (unimodal / text-only vs. multimodal) and length of conversations per example."""
+        modality_lengths = []
+        for example in self.examples:
+            is_multimodal = "image_path" in example
+            n_words = len(example["name"].split()) + len(example["name_common"].split()) + 6
+            modality_lengths.append((is_multimodal, n_words))
+        return modality_lengths
+
+    def __len__(self) -> int:
+        return len(self.examples)
