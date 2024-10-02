@@ -9,7 +9,7 @@ from typing import Optional, Tuple
 
 from transformers import PreTrainedTokenizerBase
 
-from prismatic.models.backbones.llm import LLaMa2LLMBackbone, LLMBackbone, MistralLLMBackbone, PhiLLMBackbone
+from prismatic.models.backbones.llm import LLaMa2LLMBackbone, LLMBackbone, LLaMa3LLMBackbone, MistralLLMBackbone, PhiLLMBackbone
 from prismatic.models.backbones.vision import (
     CLIPViTBackbone,
     DinoCLIPViTBackbone,
@@ -59,6 +59,9 @@ LLM_BACKBONES = {
     # === LLaMa-2 Chat Backbones ===
     "llama2-7b-chat": {"cls": LLaMa2LLMBackbone, "kwargs": {}},
     "llama2-13b-chat": {"cls": LLaMa2LLMBackbone, "kwargs": {}},
+
+    # === LLaMa-3.2 Chat Backbones ===
+    "llama3.2-1b": {"cls": LLaMa3LLMBackbone, "kwargs": {}},
 
     # === Vicuna-v1.5 Backbones ===
     "vicuna-v15-7b": {"cls": LLaMa2LLMBackbone, "kwargs": {}},

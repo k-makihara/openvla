@@ -43,7 +43,7 @@ class LLaVa_V15_Config(DatasetConfig):
         Path("download/llava-v1.5-instruct/llava_v1_5_mix665k.json"),
         Path("download/llava-v1.5-instruct/"),
     )
-    dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
+    dataset_root_dir: Path = Path("/home/deepstation/pg-vlm/openvla/data")
 
 
 # [Multimodal-Only] LLava-v15 WITHOUT the Language-Only ShareGPT Data (No Co-Training)
@@ -59,7 +59,7 @@ class LLaVa_Multimodal_Only_Config(DatasetConfig):
         Path("download/llava-v1.5-instruct/llava_v1_5_stripped625k.json"),
         Path("download/llava-v1.5-instruct/"),
     )
-    dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
+    dataset_root_dir: Path = Path("/home/deepstation/pg-vlm/openvla/data")
 
 
 # LLaVa-v15 + LVIS-Instruct-4V
@@ -75,7 +75,7 @@ class LLaVa_LVIS4V_Config(DatasetConfig):
         Path("download/llava-v1.5-instruct/llava_v1_5_lvis4v_mix888k.json"),
         Path("download/llava-v1.5-instruct/"),
     )
-    dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
+    dataset_root_dir: Path = Path("/home/deepstation/pg-vlm/openvla/data")
 
 
 # LLaVa-v15 + LRV-Instruct
@@ -91,7 +91,7 @@ class LLaVa_LRV_Config(DatasetConfig):
         Path("download/llava-v1.5-instruct/llava_v1_5_lrv_mix1008k.json"),
         Path("download/llava-v1.5-instruct/"),
     )
-    dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
+    dataset_root_dir: Path = Path("/home/deepstation/pg-vlm/openvla/data")
 
 
 # LLaVa-v15 + LVIS-Instruct-4V + LRV-Instruct
@@ -107,7 +107,7 @@ class LLaVa_LVIS4V_LRV_Config(DatasetConfig):
         Path("download/llava-v1.5-instruct/llava_v1_5_lvis4v_lrv_mix1231k.json"),
         Path("download/llava-v1.5-instruct/"),
     )
-    dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
+    dataset_root_dir: Path = Path("/home/deepstation/pg-vlm/openvla/data")
 
 # [Reproduction] LLaVa-v15 (exact dataset used in all public LLaVa-v15 models)
 @dataclass
@@ -122,7 +122,7 @@ class PGVLM_PHYSOBJECTS_Config(DatasetConfig):
         Path("download/llava-v1.5-instruct/llava_v1_5_mix665k.json"),
         Path("download/llava-v1.5-instruct/"),
     )
-    dataset_root_dir: Path = Path("/mnt/fsx/skaramcheti/datasets/prismatic-vlms")
+    dataset_root_dir: Path = Path("/home/deepstation/pg-vlm/openvla/data")
 
 
 # CVS-JPN_CLIP
@@ -131,14 +131,14 @@ class CVS_JPN_Config(DatasetConfig):
     dataset_id: str = "cvs-jpn"
 
     align_stage_components: Tuple[Path, Path] = (
-        Path("train.json"),
+        Path("train_v2.json"),
         Path(""),
     )
     finetune_stage_components: Tuple[Path, Path] = (
-        Path("train.json"),
+        Path("train_v2.json"),
         Path(""),
     )
-    dataset_root_dir: Path = Path("/groups/gaf51379/physical-grounding/products")
+    dataset_root_dir: Path = Path("/home/deepstation/Downloads/products")
 
 # === Define a Dataset Registry Enum for Reference & Validation =>> all *new* datasets must be added here! ===
 @unique

@@ -83,7 +83,8 @@ class LLaVa_v15_Reproduction_7B(ModelConfig):
     llm_backbone_id: str = "vicuna-v15-7b"
 
     image_resize_strategy: str = "letterbox"
-    llm_max_length: int = 2048
+    #llm_max_length: int = 2048
+    llm_max_length: int = 512
 
     # Align Stage Optimization Parameters
     align_epochs: int = 1
@@ -102,14 +103,19 @@ class LLaVa_v15_Reproduction_7B(ModelConfig):
     # Finetune Stage Optimization Parameters
     finetune_epochs: int = 1
     finetune_max_steps: Optional[int] = None
-    finetune_global_batch_size: int = 128
+    #finetune_global_batch_size: int = 128
+    finetune_global_batch_size: int = 16
+    #finetune_per_device_batch_size: int = 16
     finetune_per_device_batch_size: int = 16
 
-    finetune_learning_rate: float = 2e-5
+    #finetune_learning_rate: float = 2e-5
+    finetune_learning_rate: float = 2e-6
     finetune_weight_decay: float = 0.1
-    finetune_max_grad_norm: float = 1.0
+    #finetune_max_grad_norm: float = 1.0
+    finetune_max_grad_norm: float = 2.0
     finetune_lr_scheduler_type: str = "linear-warmup+cosine-decay"
-    finetune_warmup_ratio: float = 0.03
+    #finetune_warmup_ratio: float = 0.03
+    finetune_warmup_ratio: float = 0.5
 
     finetune_train_strategy: str = "fsdp-full-shard"
 

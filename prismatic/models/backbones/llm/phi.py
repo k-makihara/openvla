@@ -4,7 +4,7 @@ phi.py
 Class definition for all LLMs derived from PhiForCausalLM.
 """
 
-from typing import Optional, Type
+from typing import Optional, Type, Sequence
 
 import torch
 from torch import nn as nn
@@ -62,3 +62,7 @@ class PhiLLMBackbone(HFCausalLLMBackbone):
     @property
     def half_precision_dtype(self) -> torch.dtype:
         return torch.bfloat16
+    
+    @property
+    def last_layer_finetune_modules(self) -> Sequence[nn.Module]:
+        return (self.llm.model.embed_tokens, self.llm.model.layers[-1], self.llm.lm_head)

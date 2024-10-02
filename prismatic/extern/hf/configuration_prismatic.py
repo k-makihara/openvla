@@ -47,6 +47,8 @@ TIMM_OVERRIDE_ACT_LAYER: Dict[str, List[Optional[str]]] = {
 LLM_BACKBONE_TO_HF_PATH = {
     "llama2-7b-pure": "meta-llama/Llama-2-7b-hf", "llama2-13b-pure": "meta-llama/Llama-2-13b-hf",
     "llama2-7b-chat": "meta-llama/Llama-2-7b-chat-hf", "llama2-13b-chat": "meta-llama/Llama-2-13b-chat-hf",
+    "llama3.2-1b": "meta-llama/Llama3.2-1B",
+
 
     "vicuna-v15-7b": "lmsys/vicuna-7b-v1.5", "vicuna-v15-13b": "lmsys/vicuna-13b-v1.5",
 
@@ -58,6 +60,7 @@ LLM_BACKBONE_TO_HF_PATH = {
 LLM_BACKBONE_TO_HF_METACLASS = {
     "llama2-7b-pure": "llama", "llama2-13b-pure": "llama", "llama2-7b-chat": "llama", "llama2-13b-chat": "llama",
     "vicuna-v15-7b": "llama", "vicuna-v15-13b": "llama",
+    "llama3.2-1b": "llama",
 
     "mistral-v0.1-7b-pure": "mistral", "mistral-v0.1-7b-instruct": "mistral",
 

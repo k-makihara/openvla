@@ -241,6 +241,7 @@ class CVSFinetuneDataset(Dataset[Dict[str, torch.Tensor]]):
         turn_idx = 0
         # Get "effective" string added to prompt --> handle whitespace for tokenizer type!
         msg = prompt_builder.add_turn("human", conversation)
+        #print(msg)
 
         # Llama Tokenizer (Fast) adds extra character if a string ends in whitespace --> strip if non-empty!
         if isinstance(self.tokenizer, LlamaTokenizerFast):
@@ -250,17 +251,21 @@ class CVSFinetuneDataset(Dataset[Dict[str, torch.Tensor]]):
         elif isinstance(self.tokenizer, CodeGenTokenizerFast):
             pass
 
+        elif isinstance(self.tokenizer, PreTrainedTokenizerBase):
+            pass
+
         else:
             raise ValueError(f"Tokenizer of type `{type(self.tokenizer)}` is not explicitly handled!")
 
         # Tokenize Input IDs
         turn_input_ids = self.tokenizer(msg, add_special_tokens=turn_idx == 0).input_ids
+        #print(turn_input_ids)
 
         # [CRITICAL] We do not want to take the loss for the "USER: <msg>" prompts =>> just the responses!
         turn_labels = (
             [IGNORE_INDEX for _ in range(len(turn_input_ids))] if (turn_idx % 2) == 0 else list(turn_input_ids)
         )
-
+        #print(turn_labels)
         # Add to Trackers
         input_ids.extend(turn_input_ids)
         labels.extend(turn_labels)
@@ -281,7 +286,7 @@ class CVSFinetuneDataset(Dataset[Dict[str, torch.Tensor]]):
 
             # Process Image --> get "pixel_values" (will either be a torch.Tensor OR a Dict[str,torch.Tensor])
             pixel_values = self.image_transform(Image.open(self.image_dir / image_path).convert("RGB"))
-
+            #print(pixel_values)
             return dict(pixel_values=pixel_values, input_ids=input_ids, labels=labels)
 
         else:

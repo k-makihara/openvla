@@ -119,6 +119,7 @@ class HFCausalLLMBackbone(LLMBackbone, ABC):
         #   => Note: We're eschewing use of the AutoModel API so that we can be more explicit about LLM-specific details
         if not self.inference_mode:
             overwatch.info(f"Loading [bold]{llm_family}[/] LLM from [underline]`{hf_hub_path}`[/]", ctx_level=1)
+            #print(llm_cls)
             self.llm = llm_cls.from_pretrained(
                 hf_hub_path,
                 token=hf_token,

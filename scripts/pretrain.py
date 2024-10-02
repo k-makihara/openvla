@@ -74,7 +74,7 @@ class PretrainConfig:
     hf_token: Union[str, Path] = Path(".hf_token")                  # Environment variable or Path to HF Token
 
     # Tracking Parameters
-    #trackers: Tuple[str, ...] = ("jsonl", "wandb")                  # Trackers to initialize (if W&B, add config!)
+    trackers: Tuple[str, ...] = ("jsonl", "wandb")                  # Trackers to initialize (if W&B, add config!)
     #wandb_project: str = "onyx-vlms"                                # Name of W&B project (default: `prismatic`)
     #wandb_entity: Optional[str] = "stanford-voltron"                # Name of W&B entity (default: None)
     wandb_project: str = "pg-vla"
@@ -155,6 +155,7 @@ def pretrain(cfg: PretrainConfig) -> None:
     llm_backbone, tokenizer = get_llm_backbone_and_tokenizer(
         cfg.model.llm_backbone_id, llm_max_length=cfg.model.llm_max_length, hf_token=hf_token
     )
+    #print(tokenizer)
 
     # Create VLM => wraps `vision_backbone` and `llm`
     overwatch.info(f"Instantiating PrismaticVLM `{model_id}` for Training Stage = `{cfg.stage}`")
