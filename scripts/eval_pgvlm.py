@@ -22,14 +22,34 @@ vlm.to(device, dtype=torch.bfloat16)
 
 evallist = json.load(open("/home/koshimakihara/Downloads/products/val.json", "r"))
 
-product_list = set([cap["name"] for cap in evallist])
-user_prompt = f"What is the picture?"
-#user_prompt = "What is the product name? The template of the answer is \"a picture of <product name> \""
-#print(user_prompt)
+with open("/home/koshimakihara/Downloads/products/questionnaire_vqa_max1.json", "r") as f:
+    examples = json.load(f)
 
-for i in range(len(evallist)):
-    image = Image.open("/home/koshimakihara/Downloads/products/"+evallist[i]["image_path"]).convert("RGB")
+image_dir = "/home/koshimakihara/Downloads/products"
 
+for i in range(len(examples)):
+    image_path_left = Path(examples[i]["image_paths"]["left_image"])
+    image_path_right = Path(examples[i]["image_paths"]["right_image"])
+
+    # 画像を開く
+    left_image = Image.open(image_dir / image_path_left).convert("RGB")
+    right_image = Image.open(image_dir / image_path_right).convert("RGB")
+
+    # キャンバスのサイズを計算（横幅は画像の合計幅、高さは一番高い画像の高さ）
+    total_width = left_image.width + right_image.width
+    max_height = max(left_image.height, right_image.height)
+
+    # 新しい画像（キャンバス）を作成
+    concatenated_image = Image.new("RGB", (total_width, max_height))
+
+    # 左画像を貼り付け
+    concatenated_image.paste(left_image, (0, 0))
+
+    # 右画像を左画像の横に貼り付け
+    concatenated_image.paste(right_image, (left_image.width, 0))
+    
+    user_prompt = examples[i]["question_with_options"]
+    conversation = examples[i]["answer"]
     # Build prompt
     prompt_builder = vlm.get_prompt_builder()
     prompt_builder.add_turn(role="human", message=user_prompt)
@@ -37,14 +57,13 @@ for i in range(len(evallist)):
 
     # Generate!1
     generated_text = vlm.generate(
-        image,
+        concatenated_image,
         prompt_text,
-        do_sample=False,
+        do_sample=True,
         temperature=0.7,
-        top_k=3,
-        max_new_tokens=128,
+        max_new_tokens=4,
         min_length=1,
     )
     print("Eval "+str(i))
     print(generated_text)
-    print(evallist[i]["name"], evallist[i]["name_common"])
+    print(conversation)

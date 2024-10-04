@@ -140,6 +140,21 @@ class CVS_JPN_Config(DatasetConfig):
     )
     dataset_root_dir: Path = Path("/home/koshimakihara/Downloads/products")
 
+# CVS-JPN_CLIP
+@dataclass
+class PGVLM_CVS_JPN_Config(DatasetConfig):
+    dataset_id: str = "pgvlm-cvs-jpn"
+
+    align_stage_components: Tuple[Path, Path] = (
+        Path("questionnaire_vqa_max5.json"),
+        Path(""),
+    )
+    finetune_stage_components: Tuple[Path, Path] = (
+        Path("questionnaire_vqa_max5.json"),
+        Path(""),
+    )
+    dataset_root_dir: Path = Path("/home/koshimakihara/Downloads/products")
+
 # === Define a Dataset Registry Enum for Reference & Validation =>> all *new* datasets must be added here! ===
 @unique
 class DatasetRegistry(Enum):
@@ -154,6 +169,8 @@ class DatasetRegistry(Enum):
     LLAVA_LVIS4V_LRV = LLaVa_LVIS4V_LRV_Config
 
     CVS_JPN = CVS_JPN_Config
+
+    PGVLM_CVS_JPN = PGVLM_CVS_JPN_Config
 
     @property
     def dataset_id(self) -> str:

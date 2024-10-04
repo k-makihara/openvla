@@ -13,11 +13,11 @@ from transformers import PreTrainedTokenizerBase
 from prismatic.conf import DatasetConfig
 from prismatic.models.backbones.llm.prompting import PromptBuilder
 from prismatic.models.backbones.vision import ImageTransform
-from prismatic.preprocessing.datasets import AlignDataset, FinetuneDataset, CVSFinetuneDataset
+from prismatic.preprocessing.datasets import AlignDataset, FinetuneDataset, CVSFinetuneDataset, PGVLM_CVSFinetuneDataset
 from prismatic.util.data_utils import PaddedCollatorForLanguageModeling
 
 # Dataset Initializers =>> Maps Stage --> cls()
-DATASET_INITIALIZER = {"align": AlignDataset, "finetune": CVSFinetuneDataset, "full-finetune": CVSFinetuneDataset}
+DATASET_INITIALIZER = {"align": AlignDataset, "finetune": PGVLM_CVSFinetuneDataset, "full-finetune": PGVLM_CVSFinetuneDataset}
 
 
 def get_dataset_and_collator(

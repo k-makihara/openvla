@@ -56,7 +56,7 @@ class PretrainConfig:
 
     # DatasetConfig (`prismatic/conf/datasets.py`); override with --dataset.type `DatasetRegistry.<DATASET>.dataset_id`
     dataset: DatasetConfig = field(
-        default_factory=DatasetConfig.get_choice_class(DatasetRegistry.CVS_JPN.dataset_id)
+        default_factory=DatasetConfig.get_choice_class(DatasetRegistry.PGVLM_CVS_JPN.dataset_id)
     )
     #dataset: DatasetConfig = field(
     #    default_factory=DatasetConfig.get_choice_class(DatasetRegistry.LLAVA_V15.dataset_id)
