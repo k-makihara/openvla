@@ -61,8 +61,21 @@ def load(
 
         # Get paths for `config.json` and pretrained checkpoint
         config_json, checkpoint_pt = run_dir / "config.json", run_dir / "checkpoints" / "latest-checkpoint.pt"
+        #config_json, checkpoint_pt = run_dir / "config.json", run_dir / "checkpoints" / "step-006000-epoch-20-loss=0.0026.pt"
         assert config_json.exists(), f"Missing `config.json` for `{run_dir = }`"
         assert checkpoint_pt.exists(), f"Missing checkpoint for `{run_dir = }`"
+
+    elif os.path.isfile(model_id_or_path):
+        overwatch.info(f"Loading from local checkpoint path `{(checkpoint_pt := Path(model_id_or_path))}`")
+
+        # [Validate] Checkpoint Path should look like `.../<RUN_ID>/checkpoints/<CHECKPOINT_PATH>.pt`
+        assert (checkpoint_pt.suffix == ".pt") and (checkpoint_pt.parent.name == "checkpoints"), "Invalid checkpoint!"
+        run_dir = checkpoint_pt.parents[1]
+
+        # Get paths for `config.json`, `dataset_statistics.json` and pretrained checkpoint
+        config_json = run_dir / "config.json"
+        assert config_json.exists(), f"Missing `config.json` for `{run_dir = }`"
+
     else:
         if model_id_or_path not in GLOBAL_REGISTRY:
             raise ValueError(f"Couldn't find `{model_id_or_path = }; check `prismatic.available_model_names()`")

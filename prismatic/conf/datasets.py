@@ -43,7 +43,7 @@ class LLaVa_V15_Config(DatasetConfig):
         Path("download/llava-v1.5-instruct/llava_v1_5_mix665k.json"),
         Path("download/llava-v1.5-instruct/"),
     )
-    dataset_root_dir: Path = Path("/home/deepstation/pg-vlm/openvla/data")
+    dataset_root_dir: Path = Path("/media/koshimakihara/sb")
 
 
 # [Multimodal-Only] LLava-v15 WITHOUT the Language-Only ShareGPT Data (No Co-Training)
@@ -138,7 +138,7 @@ class CVS_JPN_Config(DatasetConfig):
         Path("train_v2.json"),
         Path(""),
     )
-    dataset_root_dir: Path = Path("/home/deepstation/Downloads/products")
+    dataset_root_dir: Path = Path("/home/koshimakihara/Downloads/products")
 
 # === Define a Dataset Registry Enum for Reference & Validation =>> all *new* datasets must be added here! ===
 @unique

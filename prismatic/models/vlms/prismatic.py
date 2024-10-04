@@ -52,6 +52,7 @@ class PrismaticVLM(VLM):
             llm_backbone,
             enable_mixed_precision_training=enable_mixed_precision_training,
         )
+        self._supports_cache_class = True
 
         # Set Weight Initialization Seed for Projector Consistency
         torch.manual_seed(vision_backbone.embed_dim)

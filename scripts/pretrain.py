@@ -58,6 +58,10 @@ class PretrainConfig:
     dataset: DatasetConfig = field(
         default_factory=DatasetConfig.get_choice_class(DatasetRegistry.CVS_JPN.dataset_id)
     )
+    #dataset: DatasetConfig = field(
+    #    default_factory=DatasetConfig.get_choice_class(DatasetRegistry.LLAVA_V15.dataset_id)
+    #)
+    
 
     # Pretraining Stage in < align (projector-only) | finetune (projector + LLM) | full-finetune (all) >
     # ---
@@ -78,7 +82,7 @@ class PretrainConfig:
     #wandb_project: str = "onyx-vlms"                                # Name of W&B project (default: `prismatic`)
     #wandb_entity: Optional[str] = "stanford-voltron"                # Name of W&B entity (default: None)
     wandb_project: str = "pg-vla"
-    wandb_entity: str = "cvs-jpn"
+    wandb_entity: str = "k-makihara"
 
     def __post_init__(self) -> None:
         """Set optimization parameters based on `stage` in {"align", "finetune"}."""
@@ -218,8 +222,8 @@ def pretrain(cfg: PretrainConfig) -> None:
         run_dir,
         draccus.encode(cfg),
         cfg.stage,
-        #wandb_project=cfg.wandb_project,
-        #wandb_entity=cfg.wandb_entity,
+        wandb_project=cfg.wandb_project,
+        wandb_entity=cfg.wandb_entity,
         grad_accumulation_steps=train_strategy.grad_accumulation_steps,
     )
 
