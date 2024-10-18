@@ -14,6 +14,7 @@ from __future__ import annotations
 from functools import partial
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Type, Union
+import numpy as np
 
 import torch
 from PIL import Image
@@ -107,12 +108,15 @@ class PrismaticVLM(VLM):
 
         # Load from Checkpoint (Custom --> should load both *projector* and *llm* weights)
         model_state_dict = torch.load(pretrained_checkpoint, map_location="cpu")["model"]
-        assert (
-            "projector" in model_state_dict and "llm_backbone" in model_state_dict
-        ), "PrismaticVLM `from_pretrained` expects checkpoint with keys for `projector` AND `llm_backbone`!"
+        #print(model_state_dict.keys())
+        #assert (
+        #    "projector" in model_state_dict and "llm_backbone" in model_state_dict
+        #), "PrismaticVLM `from_pretrained` expects checkpoint with keys for `projector` AND `llm_backbone`!"
 
-        vlm.projector.load_state_dict(model_state_dict["projector"])
-        vlm.llm_backbone.load_state_dict(model_state_dict["llm_backbone"])
+        if "projector" in model_state_dict.keys():
+            vlm.projector.load_state_dict(model_state_dict["projector"])
+        if "llm_backbone" in model_state_dict.keys():
+            vlm.llm_backbone.load_state_dict(model_state_dict["llm_backbone"])
         if "vision_backbone" in model_state_dict.keys():
             vlm.vision_backbone.load_state_dict(model_state_dict["vision_backbone"])
 
@@ -243,7 +247,7 @@ class PrismaticVLM(VLM):
 
     def load_from_checkpoint(self, stage: str, run_dir: Path, pretrained_checkpoint: Optional[Path] = None) -> None:
         """Load weights from checkpoint (if required by the given stage)."""
-        assert stage in {"align", "finetune", "full-finetune"}, f"Stage {stage} is not supported!"
+        assert stage in {"align", "finetune", "full-finetune", "last-layer-finetune"}, f"Stage {stage} is not supported!"
 
         # If we're running a `no-align` architecture, we're good!
         if self.arch_specifier.startswith("no-align"):
@@ -615,8 +619,187 @@ class PrismaticVLM(VLM):
                 pixel_values=pixel_values,      # Shape: [1, 3, res, res] or Dict[str, Shape[1, 3, res, res]]
                 **kwargs
             )
-            # fmt: on
+            #print(generated_ids.sequences)
+            #print(generated_ids.scores)
 
+            #transition_scores = super().compute_transition_scores(
+            #    generated_ids.sequences, generated_ids.scores, normalize_logits=True
+            #)
+
+            # input_length is the length of the input prompt for decoder-only models, like the GPT family, and 1 for
+
+            # encoder-decoder models, like BART or T5.
+
+            #input_length = 1 if super().config.is_encoder_decoder else input_ids.shape[1]
+
+            #generated_tokens = generated_ids.sequences[:, input_length:]
+
+            #for tok, score in zip(generated_tokens[0], transition_scores[0]):
+            #    # | token | token string | logits | probability
+            #    print(f"| {tok:5d} | {tokenizer.decode(tok):8s} | {score.cpu().numpy():.3f} | {np.exp(score.cpu().numpy()):.2%}")
+
+            # fmt: on
+        #print(generated_ids.sequences_scores[0].shape)
         generated_text = tokenizer.decode(generated_ids[0, input_ids.shape[1] :], skip_special_tokens=True).strip()
 
         return generated_text
+
+    @torch.inference_mode()
+    def generate_score(self, image: Image, prompt_text: str, **kwargs: str) -> str:
+        # For now, only support generation with a batch size of 1 for simplicity
+        image_transform, tokenizer = self.vision_backbone.image_transform, self.llm_backbone.tokenizer
+
+        # Prepare Inputs
+        input_ids = tokenizer(prompt_text, truncation=True, return_tensors="pt").input_ids.to(self.device)
+        pixel_values = image_transform(image)
+        if isinstance(pixel_values, torch.Tensor):
+            pixel_values = pixel_values[None, ...].to(self.device)
+        elif isinstance(pixel_values, dict):
+            pixel_values = {k: v[None, ...].to(self.device) for k, v in pixel_values.items()}
+        else:
+            raise ValueError(f"Unsupported `pixel_values` type = {type(pixel_values)}")
+        
+        #print(input_ids)
+        # Invoke super().generate --> taps into `GenerationMixin` which (redirects) to `forward()`
+        autocast_dtype = self.llm_backbone.half_precision_dtype
+        with torch.autocast("cuda", dtype=autocast_dtype, enabled=self.enable_mixed_precision_training):
+            # fmt: off
+            generated_ids = super().generate(
+                input_ids=input_ids,            # Shape: [1, seq]
+                pixel_values=pixel_values,      # Shape: [1, 3, res, res] or Dict[str, Shape[1, 3, res, res]]
+                **kwargs
+            )
+            #print(generated_ids.sequences)
+            #print(generated_ids.scores)
+
+            #transition_scores = super().compute_transition_scores(
+            #    generated_ids.sequences, generated_ids.scores, normalize_logits=True
+            #)
+
+            # input_length is the length of the input prompt for decoder-only models, like the GPT family, and 1 for
+
+            # encoder-decoder models, like BART or T5.
+
+            #input_length = 1 if super().config.is_encoder_decoder else input_ids.shape[1]
+
+            #generated_tokens = generated_ids.sequences[:, input_length:]
+
+            #for tok, score in zip(generated_tokens[0], transition_scores[0]):
+            #    # | token | token string | logits | probability
+            #    print(f"| {tok:5d} | {tokenizer.decode(tok):8s} | {score.cpu().numpy():.3f} | {np.exp(score.cpu().numpy()):.2%}")
+
+            # fmt: on
+        #print(generated_ids.sequences_scores.shape)
+        generated_texts = []
+        scores = []
+        for i in range(generated_ids.sequences.shape[0]):
+            generated_texts.append(tokenizer.decode(generated_ids.sequences[i, input_ids.shape[1] :], skip_special_tokens=True).strip())
+            scores.append(generated_ids.sequences_scores[i])
+        return generated_texts, scores
+
+    @torch.inference_mode()
+    def generate_preference(
+        self, image: Image, instruction: str, unnorm_key: Optional[str] = None, **kwargs: str
+    ) -> np.ndarray:
+        """
+        Core function for VLA inference; maps input image and task instruction to continuous action (de-tokenizes).
+
+        @param image: PIL Image as [height, width, 3]
+        @param instruction: Task instruction string
+        @param unnorm_key: Optional dataset name for retrieving un-normalizing statistics; if None, checks that model
+                           was trained only on a single dataset, and retrieves those statistics.
+
+        @return Unnormalized (continuous) action vector --> end-effector deltas.
+        """
+        image_transform, tokenizer = self.vision_backbone.image_transform, self.llm_backbone.tokenizer
+
+        from prismatic.preprocessing.preference_tokenizer import PreferenceTokenizer
+        self.action_tokenizer = PreferenceTokenizer(tokenizer)
+
+        # Build VLA Prompt
+        #prompt_builder = self.get_prompt_builder()
+        #prompt_builder.add_turn(role="human", message=f"{instruction}")
+        #prompt_text = prompt_builder.get_prompt()
+        prompt_text = instruction
+        #print(prompt_text)
+        # Prepare Inputs
+        input_ids = tokenizer(prompt_text, truncation=True, return_tensors="pt").input_ids.to(self.device)
+        #print(input_ids[0,0])
+        #input_ids[0] = torch.cat(input_ids[0], torch.tensor([271], device="cuda:0"))
+        #if isinstance(tokenizer, LlamaTokenizerFast):
+        #    # If the special empty token ('') does not already appear after the colon (':') token in the prompt
+        #    # (after "OUT:" or "ASSISTANT:"), insert it to match the inputs seen at training time
+        #    if not torch.all(input_ids[:, -1] == 29871):
+        #        input_ids = torch.cat(
+        #            (input_ids, torch.unsqueeze(torch.Tensor([29871]).long(), dim=0).to(input_ids.device)), dim=1
+        #        )
+        #else:
+        #    raise ValueError(f"Unsupported `tokenizer` type = {type(tokenizer)}")
+
+        # Preprocess Image
+        pixel_values = image_transform(image)
+        #print("Token")
+        #print(input_ids)
+        #print(len(input_ids[0]))
+        
+        
+        #print(pixel_values.shape)
+        if isinstance(pixel_values, torch.Tensor):
+            pixel_values = pixel_values[None, ...].to(self.device)
+        elif isinstance(pixel_values, dict):
+            pixel_values = {k: v[None, ...].to(self.device) for k, v in pixel_values.items()}
+        else:
+            raise ValueError(f"Unsupported `pixel_values` type = {type(pixel_values)}")
+
+        # Invoke super().generate --> taps into `GenerationMixin` which (redirects) to `forward()`
+        autocast_dtype = self.llm_backbone.half_precision_dtype
+        with torch.autocast("cuda", dtype=autocast_dtype, enabled=self.enable_mixed_precision_training):
+            # fmt: off
+            generated_ids = super(PrismaticVLM, self).generate(
+                input_ids=input_ids,                            # Shape: [1, seq]
+                pixel_values=pixel_values,                      # Shape: [1, 3, res, res] or Dict[str, ...]
+                #max_new_tokens=2,
+                eos_token_id=tokenizer.eos_token_id,
+                **kwargs
+            )
+            # fmt: on
+
+        # Extract predicted action tokens and translate into (normalized) continuous actions
+        
+        #print(generated_ids[0, :])
+        #print(len(generated_ids[0, :]))
+        """
+        numbers = generated_ids[0, :]
+        pattern = torch.tensor([524, 82, 29], device="cuda:0")
+        pattern_length = pattern.size(0)
+
+        result = []
+
+        for i in range(len(numbers) - pattern_length):
+            if torch.equal(numbers[i:i+pattern_length], pattern):
+                if i >= 2 and numbers[i-2] >= 120000 and numbers[i-1] >= 120000:
+                    result.append([numbers[i-2].item(), numbers[i-1].item()])
+        #print(result)
+
+        predicted_action_token_ids = np.asarray(result[0], dtype=np.int32)
+        #print(predicted_action_token_ids)
+        normalized_actions = self.action_tokenizer.decode_token_ids_to_actions(predicted_action_token_ids)
+        """
+
+        predicted_action_token_ids = generated_ids[0, -2:]
+        normalized_actions = self.action_tokenizer.decode_token_ids_to_actions(predicted_action_token_ids.cpu().numpy())
+
+        # Un-normalize Actions
+        #action_norm_stats = self.get_action_stats(unnorm_key)
+        #mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["q01"], dtype=bool))
+        #action_high, action_low = np.array(action_norm_stats["q99"]), np.array(action_norm_stats["q01"])
+        #actions = np.where(
+        #    mask,
+        #    0.5 * (normalized_actions + 1) * (action_high - action_low) + action_low,
+        #    normalized_actions,
+        #)
+
+        return normalized_actions
+
+
+    

@@ -146,11 +146,11 @@ class PGVLM_CVS_JPN_Config(DatasetConfig):
     dataset_id: str = "pgvlm-cvs-jpn"
 
     align_stage_components: Tuple[Path, Path] = (
-        Path("questionnaire_vqa_max5.json"),
+        Path("questionnaire_vqa_max2_v1_3.json"),
         Path(""),
     )
     finetune_stage_components: Tuple[Path, Path] = (
-        Path("questionnaire_vqa_max5.json"),
+        Path("questionnaire_vqa_max2_v1_3.json"),
         Path(""),
     )
     dataset_root_dir: Path = Path("/home/koshimakihara/Downloads/products")

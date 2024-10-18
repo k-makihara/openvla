@@ -35,3 +35,19 @@ generated_text = vlm.generate(
     max_new_tokens=512,
     min_length=1,
 )
+print(generated_text)
+generated_texts, scores = vlm.generate_score(
+        image,
+        prompt_text,
+        do_sample=True,
+        temperature=0.4,
+        return_dict_in_generate=True, output_scores=True,num_return_sequences=3,
+        num_beams=3,
+        max_new_tokens=512,
+        min_length=1,
+        #top_p=0.9,
+        #top_k=50,
+        repetition_penalty=1.2,
+        length_penalty=0,
+    )
+print(generated_texts, scores)

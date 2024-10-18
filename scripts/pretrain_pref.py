@@ -34,8 +34,8 @@ import yaml
 from prismatic.conf import DatasetConfig, DatasetRegistry, ModelConfig, ModelRegistry
 from prismatic.models import get_llm_backbone_and_tokenizer, get_vision_backbone_and_transform, get_vlm
 from prismatic.overwatch import initialize_overwatch
-from prismatic.preprocessing import get_dataset_and_collator
-from prismatic.training import Metrics, get_train_strategy
+from prismatic.preprocessing import get_pref_dataset_and_collator
+from prismatic.training import PrefMetrics, get_train_strategy
 from prismatic.util import set_global_seed
 
 # Disable Tokenizers Parallelism to Play Nice w/ PyTorch Multiprocessing DataLoaders
@@ -182,7 +182,7 @@ def pretrain(cfg: PretrainConfig) -> None:
 
     # Get Dataset for Specified Stage
     overwatch.info(f"Creating Dataset `{cfg.dataset.dataset_id}` => Stage: `{cfg.stage}`")
-    train_dataset, collator = get_dataset_and_collator(
+    train_dataset, preference_tokenizer, collator = get_pref_dataset_and_collator(
         cfg.stage,
         cfg.dataset,
         image_transform,
@@ -191,7 +191,6 @@ def pretrain(cfg: PretrainConfig) -> None:
         default_image_resolution=vision_backbone.default_image_resolution,
         padding_side=tokenizer.padding_side,
     )
-    #print(collator)
 
     # Create Train Strategy
     overwatch.info(f"Initializing Train Strategy `{cfg.train_strategy}`")
@@ -218,7 +217,7 @@ def pretrain(cfg: PretrainConfig) -> None:
 
     # Create Metrics =>> Handles on the fly tracking, logging to specified trackers (e.g., JSONL, Weights & Biases)
     overwatch.info(f"Creating Metrics with Active Trackers => `{cfg.trackers}`")
-    metrics = Metrics(
+    metrics = PrefMetrics(
         cfg.trackers,
         cfg.run_id,
         run_dir,
@@ -231,7 +230,7 @@ def pretrain(cfg: PretrainConfig) -> None:
 
     # Run Training
     overwatch.info("Starting Training Loop")
-    train_strategy.run_training(train_dataset, collator, metrics, stage=cfg.stage, seed=cfg.seed)
+    train_strategy.run_pref_training(train_dataset, collator, preference_tokenizer, metrics, stage=cfg.stage, seed=cfg.seed)
 
     # Finalize
     overwatch.info("Done with Training =>> Finalizing Metrics")

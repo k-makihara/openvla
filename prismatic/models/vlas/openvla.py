@@ -52,7 +52,7 @@ class OpenVLA(PrismaticVLM):
         prompt_builder = self.get_prompt_builder()
         prompt_builder.add_turn(role="human", message=f"What action should the robot take to {instruction.lower()}?")
         prompt_text = prompt_builder.get_prompt()
-
+        #print(input_ids[0])
         # Prepare Inputs
         input_ids = tokenizer(prompt_text, truncation=True, return_tensors="pt").input_ids.to(self.device)
         if isinstance(tokenizer, LlamaTokenizerFast):
@@ -64,7 +64,7 @@ class OpenVLA(PrismaticVLM):
                 )
         else:
             raise ValueError(f"Unsupported `tokenizer` type = {type(tokenizer)}")
-
+        
         # Preprocess Image
         pixel_values = image_transform(image)
         if isinstance(pixel_values, torch.Tensor):
@@ -87,6 +87,7 @@ class OpenVLA(PrismaticVLM):
             # fmt: on
 
         # Extract predicted action tokens and translate into (normalized) continuous actions
+        print(generated_ids[0,:])
         predicted_action_token_ids = generated_ids[0, -self.get_action_dim(unnorm_key) :]
         normalized_actions = self.action_tokenizer.decode_token_ids_to_actions(predicted_action_token_ids.cpu().numpy())
 

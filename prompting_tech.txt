@@ -1,0 +1,6 @@
+bosとeosで１つのConversationを閉じる
+
+BOS、EOSはモデルごとに決まっている
+Llama 3
+    BOS
+    EOS

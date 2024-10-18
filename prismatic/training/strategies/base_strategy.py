@@ -20,11 +20,12 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from prismatic.models.vlms import PrismaticVLM
 from prismatic.overwatch import initialize_overwatch
-from prismatic.training.metrics import Metrics, VLAMetrics
+from prismatic.training.metrics import Metrics, PrefMetrics, VLAMetrics
 from prismatic.util import check_bloat16_supported
 from prismatic.util.batching_utils import SplitModalitySampler
-from prismatic.util.data_utils import PaddedCollatorForActionPrediction, PaddedCollatorForLanguageModeling
+from prismatic.util.data_utils import PaddedCollatorForActionPrediction, PaddedCollatorForLanguageModeling, PaddedCollatorForPGLanguageModeling, PaddedCollatorForPreferencePrediction
 from prismatic.vla.action_tokenizer import ActionTokenizer
+from prismatic.preprocessing.preference_tokenizer import PreferenceTokenizer
 
 # Initialize Overwatch =>> Wraps `logging.Logger`
 overwatch = initialize_overwatch(__name__)
@@ -239,6 +240,414 @@ class TrainingStrategy(ABC):
             if self.max_steps is None:
                 self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, loss.item())
                 dist.barrier()
+    
+    def run_pgvlm_training(
+        self,
+        dataset: Dataset,
+        collator: PaddedCollatorForPGLanguageModeling,
+        metrics: Metrics,
+        stage: str = "finetune",
+        batch_construction_strategy: str = "split-modality",
+        seed: int = 7,
+    ) -> None:
+        """Run the training loop for the given `dataset` and `collator`; log losses, results to `metrics`"""
+        if "finetune" in stage and batch_construction_strategy == "split-modality":
+            # Instantiate the split-modality sampler; if you want to extend with other batch construction schemes,
+            #   (e.g., grouping by length) =>> can easily add them here!
+            modality_lengths = dataset.get_modality_lengths()
+            sampler = SplitModalitySampler(
+                dataset,
+                modality_lengths,
+                global_batch_size=self.global_batch_size,
+                num_replicas=overwatch.world_size(),
+                rank=overwatch.rank(),
+                seed=seed,
+                drop_last=False,
+            )
+
+        else:
+            sampler = DistributedSampler(
+                dataset,
+                num_replicas=overwatch.world_size(),
+                rank=overwatch.rank(),
+                shuffle=True,
+                seed=seed,
+                drop_last=False,
+            )
+
+        # Create a DataLoader with the initialized sampler, per-device-bsz, and collator
+        dataloader = DataLoader(
+            dataset,
+            batch_size=self.per_device_batch_size,
+            sampler=sampler,
+            collate_fn=collator,
+            num_workers=2,
+            worker_init_fn=self.worker_init_fn,
+        )
+
+        # Max Steps vs. Epochs Computation
+        steps_per_epoch = len(dataloader) // self.grad_accumulation_steps
+        if self.max_steps is not None and steps_per_epoch < self.max_steps:
+            # Just set `epochs` to some large number --> we'll short-circuit based on steps anyway
+            self.epochs = 100
+
+        # === Train ===
+        status = metrics.get_status()
+        with tqdm(
+            total=(
+                (self.epochs * (len(dataloader) // self.grad_accumulation_steps))
+                if self.max_steps is None
+                else self.max_steps
+            ),
+            desc=status,
+            leave=False,
+            disable=not overwatch.is_rank_zero(),
+        ) as progress:
+            for epoch in range(self.epochs):
+                self.vlm.train()
+                sampler.set_epoch(epoch)
+
+                # Zero-Gradients (just in case)
+                self.optimizer.zero_grad()
+
+                # Note that we'll unpack batch (and let AMP/FSDP do its thing) in the VLM.forward() call
+                #   => Basically, if we're using mixed precision (or not), autocast()/FSDP will move to device!
+                for train_idx, batch in enumerate(dataloader):
+                    # [Contract] self.vlm.forward() must automatically compute `loss` and return!
+                    with torch.autocast(
+                        "cuda",
+                        dtype=self.mixed_precision_dtype,
+                        enabled=self.enable_mixed_precision_training,
+                    ):
+                        #print(batch["pixel_values"].shape)
+                        #print(batch["labels"].shape)
+                        prob_yes = []
+                        prob_no = []
+
+                        
+                        # predict for left image
+                        output: CausalLMOutputWithPast = self.vlm(
+                            input_ids=batch["input_ids_yes"],
+                            attention_mask=batch["attention_mask_yes"],
+                            pixel_values=batch["pixel_values_left"],
+                            labels=batch["labels_yes"],
+                            multimodal_indices=batch["multimodal_indices_left"],
+                        )
+
+                        answer_logits = output.logits[:, self.vlm.vision_backbone.num_patches : -1].argmax(dim=2)
+                        answer_prob = torch.softmax(answer_logits.float(), dim=-1)
+
+                        preference_gt = batch["labels_yes"][:, 1:].to(answer_logits.device)
+                        mask = preference_gt > -100
+
+                        logits_filtered = torch.masked_select(answer_prob, mask)
+                        prob_yes.append(logits_filtered.mean())
+
+                        output: CausalLMOutputWithPast = self.vlm(
+                            input_ids=batch["input_ids_no"],
+                            attention_mask=batch["attention_mask_no"],
+                            pixel_values=batch["pixel_values_left"],
+                            labels=batch["labels_no"],
+                            multimodal_indices=batch["multimodal_indices_left"],
+                        )
+
+                        answer_logits = output.logits[:, self.vlm.vision_backbone.num_patches : -1].argmax(dim=2)
+                        answer_prob = torch.softmax(answer_logits.float(), dim=-1)
+
+                        preference_gt = batch["labels_no"][:, 1:].to(answer_logits.device)
+                        mask = preference_gt > -100
+                        
+                        
+                        logits_filtered = torch.masked_select(answer_prob, mask)
+                        prob_no.append(logits_filtered.mean())
+                        
+                        # predict for right image
+                        output: CausalLMOutputWithPast = self.vlm(
+                            input_ids=batch["input_ids_yes"],
+                            attention_mask=batch["attention_mask_yes"],
+                            pixel_values=batch["pixel_values_right"],
+                            labels=batch["labels_yes"],
+                            multimodal_indices=batch["multimodal_indices_right"],
+                        )
+
+                        answer_logits = output.logits[:, self.vlm.vision_backbone.num_patches : -1].argmax(dim=2)
+                        answer_prob = torch.softmax(answer_logits.float(), dim=-1)
+
+                        preference_gt = batch["labels_yes"][:, 1:].to(answer_logits.device)
+                        mask = preference_gt > -100
+                        
+                        
+                        logits_filtered = torch.masked_select(answer_prob, mask)
+                        prob_yes.append(logits_filtered.mean())
+
+                        output: CausalLMOutputWithPast = self.vlm(
+                            input_ids=batch["input_ids_no"],
+                            attention_mask=batch["attention_mask_no"],
+                            pixel_values=batch["pixel_values_right"],
+                            labels=batch["labels_no"],
+                            multimodal_indices=batch["multimodal_indices_right"],
+                        )
+
+                        answer_logits = output.logits[:, self.vlm.vision_backbone.num_patches : -1].argmax(dim=2)
+                        answer_prob = torch.softmax(answer_logits.float(), dim=-1)
+
+                        preference_gt = batch["labels_no"][:, 1:].to(answer_logits.device)
+                        mask = preference_gt > -100
+                        
+                        
+                        logits_filtered = torch.masked_select(answer_prob, mask)
+                        prob_no.append(logits_filtered.mean())
+
+
+                        #loss = output.loss
+
+                        o1_score = prob_yes[0] / prob_no[0]
+                        o2_score = prob_yes[1] / prob_no[1]
+
+                        # P(o1 > o2 | c)
+                        p_o1_greater = o1_score / (o1_score + o2_score)
+
+                        loss = -1 * (batch["labels_value"][0].to(answer_logits.device) * torch.log(p_o1_greater).to(answer_logits.device) + batch["labels_value"][1].to(answer_logits.device) * torch.log(1 - p_o1_greater).to(answer_logits.device))
+
+
+                    # Commit Loss (Prior to Gradient Accumulation Normalization)
+                    metrics.commit(loss=loss)
+
+                    # Normalize Loss to account for Gradient Accumulation --> Backward!
+                    # [IMPORTANT] Technically speaking, doing gradient accumulation in this way is "incorrect"; this is
+                    #             because in general, each batch has a *different number of masked out tokens* (because
+                    #             we're instruct-tuning). Taking the mean over two unbalanced means != the right thing!
+                    #
+                    #             HOWEVER -- at least at the 7B scale, the "naive" approach is just as performant as
+                    #             the "correct" implementation, without adding extra complexity.
+                    #
+                    # That being said =>> at the 13B scale, *no matter what we tried, ANY gradient accumulation is just
+                    #   really bad for downstream performance. Initial investigation shows that BF16 accumulation
+                    #   just really tanks in precision... and don't have a good/clean way to fix this. Would love for
+                    #   someone to PR and fix this (and I'd greatly appreciate it!!!)
+                    normalized_loss = loss / self.grad_accumulation_steps
+                    normalized_loss.backward()
+
+                    # Step =>> Only if Done w/ Gradient Accumulation
+                    if (train_idx + 1) % self.grad_accumulation_steps == 0:
+                        metrics.commit(update_step_time=True)
+
+                        # Clip Gradients --> this is custom, per-strategy because of DDP vs. FSDP locality-assumptions
+                        self.clip_grad_norm()
+
+                        # Optimizer & LR Scheduler Step
+                        self.optimizer.step()
+                        self.lr_scheduler.step()
+                        self.optimizer.zero_grad()
+
+                        # Push Metrics
+                        metrics.commit(global_step=metrics.global_step + 1, lr=self.lr_scheduler.get_last_lr()[0])
+                        status = metrics.push()
+
+                        # Check for Termination & Save Final Checkpoint (in case `max_steps` is not None)
+                        if self.max_steps is not None and metrics.global_step >= self.max_steps:
+                            self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, loss.item())
+                            dist.barrier()
+
+                            return
+
+                        # Update Progress Bar
+                        progress.update()
+                        progress.set_description(status)
+
+            # Save checkpoint at end each epoch (if `self.max_steps` is None)
+            if self.max_steps is None:
+                self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, loss.item())
+                dist.barrier()
+
+    def run_pref_training(
+        self,
+        dataset: Dataset,
+        collator: PaddedCollatorForPreferencePrediction,
+        preference_tokenizer: PreferenceTokenizer,
+        metrics: PrefMetrics,
+        stage: str = "finetune",
+        batch_construction_strategy: str = "split-modality",
+        seed: int = 7,
+    ) -> None:
+        """Run the training loop for the given `dataset` and `collator`; log losses, results to `metrics`"""
+        if "finetune" in stage and batch_construction_strategy == "split-modality":
+            # Instantiate the split-modality sampler; if you want to extend with other batch construction schemes,
+            #   (e.g., grouping by length) =>> can easily add them here!
+            modality_lengths = dataset.get_modality_lengths()
+            sampler = SplitModalitySampler(
+                dataset,
+                modality_lengths,
+                global_batch_size=self.global_batch_size,
+                num_replicas=overwatch.world_size(),
+                rank=overwatch.rank(),
+                seed=seed,
+                drop_last=False,
+            )
+
+        else:
+            sampler = DistributedSampler(
+                dataset,
+                num_replicas=overwatch.world_size(),
+                rank=overwatch.rank(),
+                shuffle=True,
+                seed=seed,
+                drop_last=False,
+            )
+
+        # Create a DataLoader with the initialized sampler, per-device-bsz, and collator
+        dataloader = DataLoader(
+            dataset,
+            batch_size=self.per_device_batch_size,
+            sampler=sampler,
+            collate_fn=collator,
+            num_workers=2,
+            worker_init_fn=self.worker_init_fn,
+        )
+
+        # Max Steps vs. Epochs Computation
+        steps_per_epoch = len(dataloader) // self.grad_accumulation_steps
+        if self.max_steps is not None and steps_per_epoch < self.max_steps:
+            # Just set `epochs` to some large number --> we'll short-circuit based on steps anyway
+            self.epochs = 100
+
+        # === Train ===
+        status = metrics.get_status()
+        with tqdm(
+            total=(
+                (self.epochs * (len(dataloader) // self.grad_accumulation_steps))
+                if self.max_steps is None
+                else self.max_steps
+            ),
+            desc=status,
+            leave=False,
+            disable=not overwatch.is_rank_zero(),
+        ) as progress:
+            for epoch in range(self.epochs):
+                self.vlm.train()
+                sampler.set_epoch(epoch)
+
+                # Zero-Gradients (just in case)
+                self.optimizer.zero_grad()
+
+                # Note that we'll unpack batch (and let AMP/FSDP do its thing) in the VLM.forward() call
+                #   => Basically, if we're using mixed precision (or not), autocast()/FSDP will move to device!
+                for train_idx, batch in enumerate(dataloader):
+                    # [Contract] self.vlm.forward() must automatically compute `loss` and return!
+                    with torch.autocast(
+                        "cuda",
+                        dtype=self.mixed_precision_dtype,
+                        enabled=self.enable_mixed_precision_training,
+                    ):
+                        output: CausalLMOutputWithPast = self.vlm(
+                            input_ids=batch["input_ids"],
+                            attention_mask=batch["attention_mask"],
+                            pixel_values=batch["pixel_values"],
+                            labels=batch["labels"],
+                            #multimodal_indices=batch["multimodal_indices"],
+                        )
+                        loss = output.loss
+                        #print(batch["labels"][0])
+                        #print(batch["input_ids"][0])
+
+                    # Commit Loss (Prior to Gradient Accumulation Normalization)
+                    metrics.commit(loss=loss)
+
+                    # Normalize Loss to account for Gradient Accumulation --> Backward!
+                    # [IMPORTANT] Technically speaking, doing gradient accumulation in this way is "incorrect"; this is
+                    #             because in general, each batch has a *different number of masked out tokens* (because
+                    #             we're instruct-tuning). Taking the mean over two unbalanced means != the right thing!
+                    #
+                    #             HOWEVER -- at least at the 7B scale, the "naive" approach is just as performant as
+                    #             the "correct" implementation, without adding extra complexity.
+                    #
+                    # That being said =>> at the 13B scale, *no matter what we tried, ANY gradient accumulation is just
+                    #   really bad for downstream performance. Initial investigation shows that BF16 accumulation
+                    #   just really tanks in precision... and don't have a good/clean way to fix this. Would love for
+                    #   someone to PR and fix this (and I'd greatly appreciate it!!!)
+                    normalized_loss = loss / self.grad_accumulation_steps
+                    normalized_loss.backward()
+
+
+                    # To compute action token accuracy, we need to identify the locations of the action tokens
+                    # in both `output.logits` and `batch["labels"]`. We know that when "right" padding, we
+                    # insert `self.vlm.vision_backbone.num_patches` at index 1.
+                    #
+                    # Computing `action_prediction_accuracy` is then pretty straightforward:
+                    #   1) Extract "aligned" predictions & labels
+                    #   2) Compute boolean "mask" where "labels > 2" (where 2 is ID for `EOS_TOKEN`)
+                    #           => If masking out EOS, then it's just "labels != -100 (IGNORE_INDEX)
+                    #   3) Compute masked accuracy as `(preds == logits) & mask` --> sum/divide by # unmasked!
+                    preference_preds = output.logits[:, self.vlm.vision_backbone.num_patches : -1].argmax(dim=2)
+                    #print("gg")
+                    #print(output.logits[0, self.vlm.vision_backbone.num_patches : ])
+                    #print(preference_preds[:, -5:-3])
+                    preference_gt = batch["labels"][:, 1:].to(preference_preds.device)
+                    #print(batch["labels"][0])
+                    #print(preference_tokenizer.action_token_begin_idx)
+                    mask = preference_gt > preference_tokenizer.action_token_begin_idx
+                    #mask = (preference_gt > preference_tokenizer.action_token_begin_idx) & (preference_gt < 128000)
+                    #print(mask)
+
+                    # Compute Accuracy
+                    correct_preds = (preference_preds == preference_gt) & mask
+                    preference_accuracy = correct_preds.sum().float() / mask.sum().float()
+                    #print(correct_preds)
+                    #print(preference_preds.shape)
+                    #print(preference_preds[0])
+                    #print(preference_gt.shape)
+                    #print(preference_gt[mask].shape)
+
+                    # Compute L1 Loss on Predicted (Continuous) Actions
+                    continuous_preference_pred = torch.tensor(
+                        preference_tokenizer.decode_token_ids_to_actions(preference_preds[mask].cpu().numpy())
+                    )
+                    #print(continuous_preference_pred)
+                    continuous_preference_gt = torch.tensor(
+                        preference_tokenizer.decode_token_ids_to_actions(preference_gt[mask].cpu().numpy())
+                    )
+                    #print(continuous_preference_gt)
+                    preference_l1_loss = torch.nn.functional.l1_loss(continuous_preference_pred, continuous_preference_gt)
+
+                    #normalized_loss = preference_l1_loss / self.grad_accumulation_steps
+                    #normalized_loss.backward()
+
+                    # Commit Metrics
+                    metrics.commit(preference_accuracy=preference_accuracy, l1_loss=preference_l1_loss, update_step_time=True)
+                    
+
+                    # Step =>> Only if Done w/ Gradient Accumulation
+                    if (train_idx + 1) % self.grad_accumulation_steps == 0:
+                        metrics.commit(update_step_time=True)
+
+                        # Clip Gradients --> this is custom, per-strategy because of DDP vs. FSDP locality-assumptions
+                        self.clip_grad_norm()
+
+                        # Optimizer & LR Scheduler Step
+                        self.optimizer.step()
+                        self.lr_scheduler.step()
+                        self.optimizer.zero_grad()
+
+                        # Push Metrics
+                        metrics.commit(global_step=metrics.global_step + 1, lr=self.lr_scheduler.get_last_lr()[0])
+                        status = metrics.push()
+
+                        # Check for Termination & Save Final Checkpoint (in case `max_steps` is not None)
+                        if self.max_steps is not None and metrics.global_step >= self.max_steps:
+                            self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, loss.item())
+                            dist.barrier()
+
+                            return
+
+                        # Update Progress Bar
+                        progress.update()
+                        progress.set_description(status)
+
+            # Save checkpoint at end each epoch (if `self.max_steps` is None)
+            if self.max_steps is None:
+                self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, loss.item())
+                dist.barrier()
+
 
     # === VLA Training ===
 
@@ -314,6 +723,7 @@ class TrainingStrategy(ABC):
                 action_preds = output.logits[:, self.vlm.vision_backbone.num_patches : -1].argmax(dim=2)
                 action_gt = batch["labels"][:, 1:].to(action_preds.device)
                 mask = action_gt > action_tokenizer.action_token_begin_idx
+                # 744 999 > 743
 
                 # Compute Accuracy
                 correct_preds = (action_preds == action_gt) & mask
