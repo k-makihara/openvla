@@ -1,5 +1,17 @@
 #!/bin/bash
 
-torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/pretrain.py   --model.type "prism-dinosiglip-224px-controlled+7b"   --model.model_id "minimum-pgvlm-cvsjpn-v5"   --model.vision_backbone_id "dinosiglip-vit-so-224px"   --model.image_resize_strategy "letterbox"   --model.llm_backbone_id "llama3.2-1b"
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/pretrain_pref.py   --model.type "prism-dinosiglip-224px-controlled+7b"   --model.model_id "minimum-pgvlm-cvsjpn-pref-v6-1"   --model.vision_backbone_id "dinosiglip-vit-so-224px"   --model.image_resize_strategy "letterbox"   --model.llm_backbone_id "llama3.2-1b" --model.finetune_max_steps 1000 --model.finetune_learning_rate 1e-5
 
-torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/pretrain_pref.py   --model.type "prism-dinosiglip-224px-controlled+7b"   --model.model_id "minimum-pgvlm-cvsjpn-pref-v3"   --model.vision_backbone_id "dinosiglip-vit-so-224px"   --model.image_resize_strategy "letterbox"   --model.llm_backbone_id "llama3.2-1b"
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/pretrain_pref.py   --model.type "prism-dinosiglip-224px-controlled+7b"   --model.model_id "minimum-pgvlm-cvsjpn-pref-v6-2"   --model.vision_backbone_id "dinosiglip-vit-so-224px"   --model.image_resize_strategy "letterbox"   --model.llm_backbone_id "llama3.2-1b" --model.finetune_max_steps 1000 --model.finetune_learning_rate 2e-6
+
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/pretrain_pref.py   --model.type "prism-dinosiglip-224px-controlled+7b"   --model.model_id "minimum-pgvlm-cvsjpn-pref-v6-3"   --model.vision_backbone_id "dinosiglip-vit-so-224px"   --model.image_resize_strategy "letterbox"   --model.llm_backbone_id "llama3.2-1b" --model.finetune_max_steps 1000 --model.finetune_warmup_ratio 0.1
+
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/pretrain_pref.py   --model.type "prism-dinosiglip-224px-controlled+7b"   --model.model_id "minimum-pgvlm-cvsjpn-pref-v6-4"   --model.vision_backbone_id "dinosiglip-vit-so-224px"   --model.image_resize_strategy "letterbox"   --model.llm_backbone_id "llama3.2-1b" --model.finetune_max_steps 1000 --model.finetune_warmup_ratio 0.5
+
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/pretrain_pref.py   --model.type "prism-dinosiglip-224px-controlled+7b"   --model.model_id "minimum-pgvlm-cvsjpn-pref-v6-5"   --model.vision_backbone_id "dinosiglip-vit-so-224px"   --model.image_resize_strategy "letterbox"   --model.llm_backbone_id "llama3.2-1b" --model.finetune_max_steps 1000 --model.finetune_learning_rate 1e-5 --model.finetune_warmup_ratio 0.1
+
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/pretrain_pref.py   --model.type "prism-dinosiglip-224px-controlled+7b"   --model.model_id "minimum-pgvlm-cvsjpn-pref-v6-6"   --model.vision_backbone_id "dinosiglip-vit-so-224px"   --model.image_resize_strategy "letterbox"   --model.llm_backbone_id "llama3.2-1b" --model.finetune_max_steps 1000 --model.finetune_learning_rate 1e-5 --model.finetune_warmup_ratio 0.5
+
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/pretrain_pref.py   --model.type "prism-dinosiglip-224px-controlled+7b"   --model.model_id "minimum-pgvlm-cvsjpn-pref-v6-7"   --model.vision_backbone_id "dinosiglip-vit-so-224px"   --model.image_resize_strategy "letterbox"   --model.llm_backbone_id "llama3.2-1b" --model.finetune_max_steps 1000 --model.finetune_learning_rate 2e-6 --model.finetune_warmup_ratio 0.1
+
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/pretrain_pref.py   --model.type "prism-dinosiglip-224px-controlled+7b"   --model.model_id "minimum-pgvlm-cvsjpn-pref-v6-8"   --model.vision_backbone_id "dinosiglip-vit-so-224px"   --model.image_resize_strategy "letterbox"   --model.llm_backbone_id "llama3.2-1b" --model.finetune_max_steps 1000 --model.finetune_learning_rate 2e-6 --model.finetune_warmup_ratio 0.5

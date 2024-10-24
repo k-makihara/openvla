@@ -650,7 +650,10 @@ class PrismaticVLM(VLM):
         image_transform, tokenizer = self.vision_backbone.image_transform, self.llm_backbone.tokenizer
 
         # Prepare Inputs
-        input_ids = tokenizer(prompt_text, truncation=True, return_tensors="pt").input_ids.to(self.device)
+        inputs = tokenizer(prompt_text, truncation=True, return_tensors="pt")
+        input_ids = inputs.input_ids.to(self.device)
+        attention_mask = inputs.attention_mask.to(self.device)
+        #print(tokenizer(prompt_text, truncation=True, return_tensors="pt"))
         pixel_values = image_transform(image)
         if isinstance(pixel_values, torch.Tensor):
             pixel_values = pixel_values[None, ...].to(self.device)
@@ -666,6 +669,7 @@ class PrismaticVLM(VLM):
             # fmt: off
             generated_ids = super().generate(
                 input_ids=input_ids,            # Shape: [1, seq]
+                attention_mask=attention_mask,
                 pixel_values=pixel_values,      # Shape: [1, 3, res, res] or Dict[str, Shape[1, 3, res, res]]
                 **kwargs
             )
@@ -724,6 +728,7 @@ class PrismaticVLM(VLM):
         #print(prompt_text)
         # Prepare Inputs
         input_ids = tokenizer(prompt_text, truncation=True, return_tensors="pt").input_ids.to(self.device)
+        print(tokenizer(prompt_text, truncation=True, return_tensors="pt"))
         #print(input_ids[0,0])
         #input_ids[0] = torch.cat(input_ids[0], torch.tensor([271], device="cuda:0"))
         #if isinstance(tokenizer, LlamaTokenizerFast):
@@ -766,7 +771,7 @@ class PrismaticVLM(VLM):
 
         # Extract predicted action tokens and translate into (normalized) continuous actions
         
-        #print(generated_ids[0, :])
+        print(generated_ids[0, :])
         #print(len(generated_ids[0, :]))
         """
         numbers = generated_ids[0, :]

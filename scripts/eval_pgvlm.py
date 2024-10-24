@@ -13,15 +13,17 @@ import random
 
 # For gated LMs like Llama-2, make sure to request official access, and generate an access token
 #hf_token = Path(".hf_token").read_text().strip()
-#hf_token = "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"
+hf_token = "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"
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 # Load a pretrained VLM (either local path, or ID to auto-download from the HF Hub) 
-#model_id = "prism-dinosiglip+7b"
-vlm = load("/home/koshimakihara/openvla/runs/pgvlm-cvs-jpn+minimum-pgvlm-cvsjpn-pref-v4+stage-finetune+x7/checkpoints/step-046069-epoch-00-loss=0.0000.pt")
-#vlm = load("/home/koshimakihara/openvla/runs/pgvlm-cvs-jpn+minimum-pgvlm-cvsjpn-v5+stage-finetune+x7/checkpoints/step-046069-epoch-00-loss=0.1173.pt")
-#vlm = load(model_id, hf_token=hf_token)
+model_id = "prism-dinosiglip+7b"
+#vlm = load("/home/koshimakihara/openvla/runs/pgvlm-cvs-jpn+minimum-pgvlm-cvsjpn-pref-v4+stage-finetune+x7/checkpoints/step-046069-epoch-00-loss=0.0543.pt")
+#vlm = load("/home/koshimakihara/openvla/runs/pgvlm-cvs-jpn+minimum-pgvlm-cvsjpn-v6-7+stage-finetune+x7/checkpoints/step-001000-epoch-00-loss=0.2800.pt")
+vlm = load(model_id, hf_token=hf_token)
 vlm.to(device, dtype=torch.bfloat16)
+
+
 
 rand_num = 10
 for j in range(rand_num):
@@ -72,14 +74,14 @@ for j in range(rand_num):
         prompt_text = prompt_builder.get_prompt()
         #print(prompt_text)
         # Generate!1
-        #generated_text = vlm.generate(
-        #    concatenated_image,
-        #    prompt_text,
-        #    do_sample=True,
-        #    temperature=0.4,
-        #    max_new_tokens=512,
-        #    min_length=1,
-        #)
+        generated_text = vlm.generate(
+            concatenated_image,
+            prompt_text,
+            do_sample=False,
+            temperature=0.7,
+            max_new_tokens=4,
+            min_length=1,
+        )
         #generated_texts, scores = vlm.generate_score(
         #    concatenated_image,
         #    prompt_text,
@@ -94,25 +96,25 @@ for j in range(rand_num):
         #    repetition_penalty=1.5,
         #    length_penalty=0,
         #)
-        generated_preference = vlm.generate_preference(
-            concatenated_image,
-            prompt_text,
-            do_sample=False,
-            #temperature=0.7,
-            max_new_tokens=2,
-            #min_length=1,
-        )
+        #generated_preference = vlm.generate_preference(
+        #    concatenated_image,
+        #    prompt_text,
+        #    do_sample=False,
+        #    #temperature=0.7,
+        #    max_new_tokens=2,
+        #    #min_length=1,
+        #)
         print("Eval "+str(i+1))
         #print(generated_text)
-        #print(generated_texts, scores)
+        print(generated_texts, scores)
         #print(generated_preference)
-        if generated_preference[0] > generated_preference[1]:
-            ans = "left"
-        else:
-            ans = "right"
-        if abs(generated_preference[0] - generated_preference[1]) < 0.02:
-            ans = "tie"
-        print(ans, conversation)
+        #if generated_preference[0] > generated_preference[1]:
+        #    ans = "left"
+        #else:
+        #    ans = "right"
+        #if abs(generated_preference[0] - generated_preference[1]) < 0.02:
+        #    ans = "tie"
+        #print(ans, conversation)
 
         #if conversation == ans:
         #    accuracy = accuracy + 1
